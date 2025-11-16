@@ -1,4 +1,17 @@
+# 🏠 Application R Shiny — Analyse des DPE du Rhône (69)
+**Projet : iut_sd2_rshiny_enedis**  
+**BUT SD2 — Université Lyon 2 — Enedis**
 
+---
+
+## 🎯 Objectifs du projet
+Cette application permet d’explorer les Diagnostics de Performance Énergétique (DPE) des logements du département du Rhône (code 69), en combinant :
+
+- Les données de l’API ADEME (logements existants et neufs)
+- Les coordonnées géographiques issues du fichier BAN `adresses-69.csv`
+- Des analyses statistiques univariées et bivariées
+- Une cartographie interactive
+- L’export des données et des graphiques
 - La mise à jour automatique des données via l’API
 
 ---
@@ -50,19 +63,3 @@ Projet R Shiny/
 │
 └─ report/
 └─ (rapport RMarkdown fourni séparément)
-
-powershell
-Copier le code
-
----
-
-## 🔧 Installation locale
-
-### 1. Prérequis
-Installer R et RStudio, puis les packages :
-
-```r
-install.packages(c(
-  "shiny", "shinythemes", "shinymanager", "leaflet", "DT",
-  "ggplot2", "dplyr", "httr", "jsonlite", "plyr", "lubridate"
-))
