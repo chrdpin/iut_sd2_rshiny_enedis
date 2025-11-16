@@ -8,6 +8,8 @@ L’objectif est de construire une application complète permettant d’explorer
 
 L’application intègre les packs **Standard**, **Intermédiaire** et **Expert** demandés dans le cahier des charges.
 
+Lien de l'application : https://chrdpin.shinyapps.io/projet_r_shiny/
+
 ---
 
 ## Table des matières
