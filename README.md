@@ -1,239 +1,139 @@
-OBSERVATOIRE DPE – DÉPARTEMENT DU RHÔNE (69)
-
-Tableau de bord interactif pour analyser et visualiser les Diagnostics de Performance Énergétique (DPE) des logements du département du Rhône à partir des données de l’ADEME.
-
-Table des Matières
-
-À Propos
-
-Fonctionnalités
-
-Démo
-
-Installation
-
-Utilisation
-
-Architecture
-
-Technologies
-
-Documentation
-
-Contributeurs
-
-À Propos
-Contexte du Projet
-
-Cette application Shiny a été développée dans le cadre d’un projet universitaire (BUT SD2 – IUT Lyon 2) autour de l’analyse des DPE du département du Rhône, en partenariat pédagogique avec Enedis.
-
-L’outil permet d’explorer les performances énergétiques des logements (existants et neufs), de visualiser les étiquettes DPE, de repérer d’éventuelles anomalies, de réaliser des analyses statistiques et d’afficher une cartographie interactive basée sur les coordonnées BAN du fichier adresses-69.csv.
-
-Objectifs
-
-L’application vise à :
-
-Visualiser la répartition des étiquettes énergétiques du Rhône (69).
-
-Identifier les classes énergétiques favorables (A–C) et défavorables (E–G).
-
-Étudier :
-
-Surface habitable
-
-Année de construction
-
-Types de logements
-
-Analyser la relation entre deux variables numériques (corrélation + régression).
-
-Cartographier les logements à l’aide d’une jointure BAN (coordonnées X/Y → latitude/longitude).
-
-Permettre une mise à jour automatique via l’API ADEME.
-
-Exporter facilement les graphiques et les données filtrées.
-
-Source des Données
-
-Les données proviennent de l’ADEME :
-
-API DPE v2 – Logements existants
-
-API DPE v2 – Logements neufs
-
-Les coordonnées géographiques proviennent du fichier local :
-
-adresses-69.csv (BAN – Base Adresse Nationale)
-
-Fonctionnalités
-Niveau Standard
-
-Tableau de bord complet avec plusieurs onglets thématiques
-
-Interface en dark mode (thème cyborg)
-
-4 KPI dynamiques :
-
-Nombre total de DPE
-
-Surface habitable moyenne
-
-Part des étiquettes A–C
-
-Dernière date de DPE
-
-4 graphes statistiques :
-
-Histogramme
-
-Barplot
-
-Boxplot
-
-Nuage de points
-
-Gestion automatique des outliers (p1–p99) pour éviter les valeurs aberrantes
-
-Carte interactive Leaflet :
-
-Markers individuels
-
-Agrégation par code postal
-
-Filtres multi-critères :
-
-Code postal
-
-Type de logement (existant / neuf)
-
-Année de construction
-
-Niveau Intermédiaire
-
-Export des données filtrées (.csv)
-
-Export des graphiques (.png)
-
-Sélection libre de X et Y pour la régression
-
-Régression linéaire simple + droite de tendance
-
-Calcul du coefficient de corrélation
-
-Niveau Expert
-
-Authentification utilisateur (shinymanager)
-
-Identifiant : admin / Mot de passe : admin
-
-Identifiant : etudiant / Mot de passe : iut69
-
-Mise à jour automatique des données via l’API ADEME
-
-Jointure automatique coordonnées API → lat/lon via BAN
-
-Charte visuelle dark intégrée
-
-Démo
-Application en Ligne
-
-(à compléter après déploiement shinyapps.io)
-Exemple :
-URL : https://<ton_compte>.shinyapps.io/iut_sd2_rshiny_enedis/
-
-Vidéo de Démonstration (optionnel)
-
-(lien YouTube si tu fais une vidéo)
-
-Installation
-1. Installer les packages nécessaires
+# 🔥 Application R Shiny — Analyse des DPE du Rhône (69)
+
+Projet réalisé dans le cadre du BUT SD2 (IUT Lyon 2) — Module R Shiny.  
+L’objectif est de construire une application complète permettant d’explorer les DPE (Diagnostics de Performance Énergétique) du département 69 à partir :
+
+- de l’API ADEME (logements existants + logements neufs)
+- du fichier `adresses-69.csv` contenant les coordonnées géographiques BAN
+
+L’application intègre les **packs Standard + Intermédiaire + Expert** demandés dans le cahier des charges.
+
+---
+
+## 🚀 Fonctionnalités principales
+
+### 🔹 **Pack Standard**
+- Filtrage dynamique : code postal, type de logement, année
+- Plusieurs KPI :  
+  - Nombre de DPE  
+  - Surface moyenne  
+  - Part des classes A–C  
+  - Dernière date de DPE
+- Analyse statistique :
+  - Histogrammes
+  - Boxplots
+  - Gestion automatique des outliers (p1–p99)
+- Analyse bivariée :
+  - Nuage de points
+  - Régression linéaire simple
+  - Corrélation de Pearson
+- Cartographie interactive (Leaflet) :  
+  - Markers individuels  
+  - Agrégation par code postal  
+- Export des données filtrées (.csv)
+- Export des graphiques (.png)
+- Application disponible en **dark mode**
+
+---
+
+### 🔹 **Pack Intermédiaire**
+- Choix du thème via `themeSelector()`
+- Sélection libre des variables X/Y pour l’analyse bivariée
+- Gestion avancée des variables numériques
+
+---
+
+### 🔹 **Pack Expert**
+- Authentification utilisateur via `shinymanager`
+- Actualisation des données en direct via l’API ADEME (bouton “Rafraîchir les données”)
+- Architecture propre + helpers + gestion outliers
+- Jointure automatique entre coordonnées BAN ADEME et `adresses-69.csv`
+
+---
+
+## 📂 Structure du projet
+
+Projet R Shiny/
+│
+├── app.R
+├── adresses-69.csv
+│
+└── www/
+└── images/
+├── logo_app.png
+└── logo_iut.png
+
+bash
+Copier le code
+
+---
+
+## 🛠️ Installation et lancement
+
+### 1. Installer les packages nécessaires
+
+```r
 install.packages(c(
   "shiny", "shinythemes", "shinymanager", "leaflet", "DT",
   "ggplot2", "dplyr", "httr", "jsonlite", "plyr", "lubridate"
 ))
-
-2. Placer les fichiers au bon endroit
-Projet/
-├── app.R
-├── adresses-69.csv
-└── www/
-    └── images/
-         ├── logo_app.png
-         └── logo_iut.png
-
-3. Lancer l’application
+2. Placer adresses-69.csv et le dossier www/ dans le même répertoire que app.R.
+3. Lancer l'application
+r
+Copier le code
 shiny::runApp()
+🔑 Authentification
+L’accès à l’application est protégé par shinymanager.
 
-Utilisation
+Identifiants disponibles :
 
-Se connecter avec les identifiants fournis.
+Utilisateur	Mot de passe
+admin	admin
+etudiant	iut69
 
-Choisir un code postal, un type de logement et une période de construction.
+🌍 Déploiement shinyapps.io
+Installer rsconnect :
 
-Explorer les KPI dynamiques.
+r
+Copier le code
+install.packages("rsconnect")
+Configurer votre compte :
 
-Ouvrir les onglets d’analyse (univariée, bivariée).
+r
+Copier le code
+rsconnect::setAccountInfo(
+  name="VOTRE_NOM",
+  token="VOTRE_TOKEN",
+  secret="VOTRE_SECRET"
+)
+Déployer l'app :
 
-Visualiser les logements sur la carte interactive.
+r
+Copier le code
+rsconnect::deployApp()
+L’application sera accessible via :
 
-Exporter les graphiques ou les données filtrées.
+arduino
+Copier le code
+https://votre_nom.shinyapps.io/iut_sd2_rshiny_enedis/
+📌 Sources des données
+🔹 API ADEME — DPE Logements existants
+https://data.ademe.fr/datasets/dpe03existant
 
-Architecture
-iut_sd2_rshiny_enedis/
-│
-├── app.R                      # Application Shiny principale
-│
-├── www/
-│   └── images/
-│        ├── logo_app.png
-│        └── logo_iut.png
-│
-└── adresses-69.csv            # Coordonnées BAN
+🔹 API ADEME — DPE Logements neufs
+https://data.ademe.fr/datasets/dpe02neuf
 
+🔹 Coordonnées géographiques BAN
+Fichier local adresses-69.csv
 
-Le script se compose de :
+👤 Auteur
+Arthur Mallière
+BUT Science des Données — IUT Lumière Lyon 2
+2024–2025
 
-Helpers : thème dark + gestion outliers
+🧩 Remarques
+Le rapport RMarkdown n’est pas généré automatiquement dans l’app : il est fourni séparément.
 
-Authentification utilisateur
+L’application charge automatiquement les données via l’API au démarrage.
 
-Appels API ADEME (existant + neuf)
-
-Jointure géographique BAN
-
-Interface (UI)
-
-Logique (server)
-
-Export des données et graphiques
-
-Technologies
-
-R Shiny
-
-Leaflet
-
-DT
-
-ggplot2
-
-dplyr
-
-shinythemes
-
-shinymanager
-
-API ADEME (DataFair)
-
-Documentation
-Document	Description
-README.md	Vue d’ensemble du projet
-doc_fonctionnelle.md	Documentation fonctionnelle (onglets, utilisation)
-doc_technique.md	Architecture et logique interne
-Contributeurs
-
-Arthur Mallière – Développeur Shiny
-BUT Science des Données — IUT Lyon 2
-
-Encadrants / contexte :
-Projet réalisé dans le cadre de l’enseignement R Shiny et du partenariat universitaire avec Enedis.
+Les coordonnées ADEME sont jointes avec adresses-69.csv pour permettre l’affichage sur Leaflet.
