@@ -237,15 +237,3 @@ BUT Science des Données — IUT Lyon 2
 
 Encadrants / contexte :
 Projet réalisé dans le cadre de l’enseignement R Shiny et du partenariat universitaire avec Enedis.
-
-
-
-
-
-
-
-
-
-
-
-
