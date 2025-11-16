@@ -52,14 +52,12 @@ Cette application permet d’explorer les Diagnostics de Performance Énergétiq
 ## 📁 Structure du projet
 
 Projet R Shiny/
-│
-├─ app.R
-├─ adresses-69.csv
-│
-├─ www/
-│ └─ images/
-│ ├─ logo_app.png
-│ └─ logo_iut.png
-│
-└─ report/
-└─ (rapport RMarkdown fourni séparément)
+
+-  app.R
+- adresses-69.csv
+- www/
+  - images/
+  - logo_app.png
+  - logo_iut.png
+- report/
+- (rapport RMarkdown fourni séparément)
