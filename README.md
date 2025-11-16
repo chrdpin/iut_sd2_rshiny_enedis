@@ -1,4 +1,4 @@
-# 🔥 Application R Shiny — Analyse des DPE du Rhône (69)
+# Application R Shiny — Analyse des DPE du Rhône (69)
 
 Projet réalisé dans le cadre du BUT SD2 (IUT Lyon 2) — Module R Shiny.  
 L’objectif est de construire une application complète permettant d’explorer les DPE (Diagnostics de Performance Énergétique) du département 69 à partir :
@@ -6,134 +6,75 @@ L’objectif est de construire une application complète permettant d’explorer
 - de l’API ADEME (logements existants + logements neufs)
 - du fichier `adresses-69.csv` contenant les coordonnées géographiques BAN
 
-L’application intègre les **packs Standard + Intermédiaire + Expert** demandés dans le cahier des charges.
+L’application intègre les packs **Standard**, **Intermédiaire** et **Expert** demandés dans le cahier des charges.
 
 ---
 
-## 🚀 Fonctionnalités principales
+## Fonctionnalités principales
 
-### 🔹 **Pack Standard**
-- Filtrage dynamique : code postal, type de logement, année
-- Plusieurs KPI :  
-  - Nombre de DPE  
-  - Surface moyenne  
-  - Part des classes A–C  
+### Pack Standard
+
+- Filtrage dynamique :
+  - Code postal
+  - Type de logement (Existant / Neuf / Tous)
+  - Année de construction
+- KPI :
+  - Nombre total de DPE
+  - Surface habitable moyenne
+  - Part des étiquettes A–C
   - Dernière date de DPE
-- Analyse statistique :
-  - Histogrammes
-  - Boxplots
-  - Gestion automatique des outliers (p1–p99)
+- Analyses statistiques :
+  - Histogrammes (avec gestion des outliers via trimming p1–p99)
+  - Boxplots par type de logement
+  - Répartition des étiquettes DPE
 - Analyse bivariée :
   - Nuage de points
   - Régression linéaire simple
-  - Corrélation de Pearson
-- Cartographie interactive (Leaflet) :  
-  - Markers individuels  
-  - Agrégation par code postal  
-- Export des données filtrées (.csv)
-- Export des graphiques (.png)
-- Application disponible en **dark mode**
+  - Coefficient de corrélation de Pearson
+- Cartographie interactive (Leaflet) :
+  - Markers individuels géolocalisés
+  - Agrégation par code postal
+- Export :
+  - Export des données filtrées au format `.csv`
+  - Export des graphiques au format `.png`
+- Interface :
+  - Application disponible en dark mode (thème `cyborg` de `shinythemes`)
 
 ---
 
-### 🔹 **Pack Intermédiaire**
-- Choix du thème via `themeSelector()`
-- Sélection libre des variables X/Y pour l’analyse bivariée
-- Gestion avancée des variables numériques
+### Pack Intermédiaire
+
+- Choix du thème de l’application via `themeSelector()`
+- Sélection libre des variables X et Y pour l’analyse bivariée
+- Export des graphiques (histogrammes, boxplots, nuages de points) au format `.png`
 
 ---
 
-### 🔹 **Pack Expert**
-- Authentification utilisateur via `shinymanager`
-- Actualisation des données en direct via l’API ADEME (bouton “Rafraîchir les données”)
-- Architecture propre + helpers + gestion outliers
-- Jointure automatique entre coordonnées BAN ADEME et `adresses-69.csv`
+### Pack Expert
+
+- Authentification utilisateur via `shinymanager` :
+  - Utilisateur : `admin` / Mot de passe : `admin`
+  - Utilisateur : `etudiant` / Mot de passe : `iut69`
+- Actualisation des données en direct via l’API ADEME (bouton « Rafraîchir les données »)
+- Architecture factorisée avec :
+  - Helpers pour le thème dark ggplot2
+  - Fonction de gestion des outliers (trimming p1–p99)
+  - Fonctions dédiées pour l’API : logements existants et neufs
+- Jointure automatique entre :
+  - Coordonnées ADEME (`coordonnee_cartographique_x_ban`, `coordonnee_cartographique_y_ban`)
+  - Coordonnées BAN issues de `adresses-69.csv` (`x`, `y`, `lon`, `lat`)
 
 ---
 
-## 📂 Structure du projet
+## Structure du projet
 
+```text
 Projet R Shiny/
 │
 ├── app.R
 ├── adresses-69.csv
 │
 └── www/
-└── images/
-├── logo_app.png
-└── logo_iut.png
-
-bash
-Copier le code
-
----
-
-## 🛠️ Installation et lancement
-
-### 1. Installer les packages nécessaires
-
-```r
-install.packages(c(
-  "shiny", "shinythemes", "shinymanager", "leaflet", "DT",
-  "ggplot2", "dplyr", "httr", "jsonlite", "plyr", "lubridate"
-))
-2. Placer adresses-69.csv et le dossier www/ dans le même répertoire que app.R.
-3. Lancer l'application
-r
-Copier le code
-shiny::runApp()
-🔑 Authentification
-L’accès à l’application est protégé par shinymanager.
-
-Identifiants disponibles :
-
-Utilisateur	Mot de passe
-admin	admin
-etudiant	iut69
-
-🌍 Déploiement shinyapps.io
-Installer rsconnect :
-
-r
-Copier le code
-install.packages("rsconnect")
-Configurer votre compte :
-
-r
-Copier le code
-rsconnect::setAccountInfo(
-  name="VOTRE_NOM",
-  token="VOTRE_TOKEN",
-  secret="VOTRE_SECRET"
-)
-Déployer l'app :
-
-r
-Copier le code
-rsconnect::deployApp()
-L’application sera accessible via :
-
-arduino
-Copier le code
-https://votre_nom.shinyapps.io/iut_sd2_rshiny_enedis/
-📌 Sources des données
-🔹 API ADEME — DPE Logements existants
-https://data.ademe.fr/datasets/dpe03existant
-
-🔹 API ADEME — DPE Logements neufs
-https://data.ademe.fr/datasets/dpe02neuf
-
-🔹 Coordonnées géographiques BAN
-Fichier local adresses-69.csv
-
-👤 Auteur
-Arthur Mallière
-BUT Science des Données — IUT Lumière Lyon 2
-2024–2025
-
-🧩 Remarques
-Le rapport RMarkdown n’est pas généré automatiquement dans l’app : il est fourni séparément.
-
-L’application charge automatiquement les données via l’API au démarrage.
-
-Les coordonnées ADEME sont jointes avec adresses-69.csv pour permettre l’affichage sur Leaflet.
+    └── images/
+         ├── logo_app.png
+         └── logo_iut.png
