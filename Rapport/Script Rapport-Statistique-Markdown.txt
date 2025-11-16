@@ -1,0 +1,658 @@
+---
+title: "Rapport statistique DPE 69"
+author: "Christophe DEPIN, Arthur MALLIERE, Oleksandr Lisovyi"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+params:
+  code_postal: "69"              # "69" pour tout le département, ou un code postal précis (ex : "69008")
+  type_logement: "les deux"      # "Existant", "Neuf", "les deux"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
+
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+library(plyr)
+library(knitr)
+
+# ---- THEME DARK COHERENT AVEC L'APPLICATION SHINY ----
+theme_app_dark <- function() {
+  theme_minimal(base_family = "sans") +
+    theme(
+      plot.background  = element_rect(fill = "#222222", colour = NA),
+      panel.background = element_rect(fill = "#222222", colour = NA),
+      legend.background = element_rect(fill = "#222222", colour = NA),
+      legend.key = element_rect(fill = "#222222", colour = NA),
+      text       = element_text(colour = "white"),
+      axis.text  = element_text(colour = "white"),
+      axis.title = element_text(colour = "white"),
+      plot.title = element_text(colour = "white", face = "bold")
+    )
+}
+
+# ---- GESTION DES OUTLIERS (P1–P99) ----
+trim_var_for_plot <- function(df, var, probs = c(0.01, 0.99)) {
+  if (!var %in% names(df)) return(list(df = df[0, , drop = FALSE], limits = c(NA, NA)))
+  
+  num <- suppressWarnings(as.numeric(df[[var]]))
+  if (all(is.na(num))) return(list(df = df[0, , drop = FALSE], limits = c(NA, NA)))
+  
+  q <- quantile(num, probs = probs, na.rm = TRUE, names = FALSE)
+  keep <- num >= q[1] & num <= q[2]
+  
+  list(df = df[keep | is.na(num), , drop = FALSE], limits = q)
+}
+
+# ---- PALETTE DPE ----
+palette_dpe <- c(
+  "A" = "#00A651",
+  "B" = "#5ABF50",
+  "C" = "#C1D82F",
+  "D" = "#F2E500",
+  "E" = "#F9A400",
+  "F" = "#E05E00",
+  "G" = "#CC0000"
+)
+valid_letters <- names(palette_dpe)
+
+# ---- CHAMPS COMMUNS DEMANDES ----
+dpe_fields_common <- c(
+  "numero_dpe",
+  "date_reception_dpe",
+  "date_etablissement_dpe",
+  "date_visite_diagnostiqueur",
+  "modele_dpe",
+  "numero_dpe_remplace",
+  "date_fin_validite_dpe",
+  "version_dpe",
+  "numero_dpe_immeuble_associe",
+  "annee_construction",
+  "type_batiment",
+  "type_installation_chauffage",
+  "type_installation_ecs",
+  "periode_construction",
+  "code_departement_ban",
+  "code_insee_ban",
+  "coordonnee_cartographique_x_ban",
+  "coordonnee_cartographique_y_ban",
+  "type_energie_principale_chauffage",
+  "type_energie_principale_ecs",
+  "cout_total_5_usages",
+  "etiquette_dpe",
+  "etiquette_ges",
+  "classe_inertie_batiment",
+  "cout_chauffage",
+  "cout_ecs",
+  "cout_refroidissement",
+  "cout_eclairage",
+  "code_postal_ban",
+  "score_ban",
+  "surface_habitable_logement",
+  "conso_5_usages_par_m2_ep",
+  "conso_5_usages_par_m2_ef",
+  "conso_5_usages_ef",
+  "conso_ecs_ep",
+  "emission_ges_5_usages",
+  "emission_ges_5_usages_par_m2",
+  "qualite_isolation_murs",
+  "qualite_isolation_plancher_bas",
+  "qualite_isolation_enveloppe",
+  "isolation_toiture",
+  "inertie_lourde",
+  "indicateur_confort_ete",
+  "besoin_chauffage",
+  "besoin_refroidissement",
+  "besoin_ecs",
+  "zone_climatique",
+  "classe_altitude",
+  "nom_commune_ban",
+  "_geopoint"
+)
+
+dpe_fields_existant <- c(
+  dpe_fields_common,
+  "adresse_ban",
+  "numero_voie_ban",
+  "nom_rue_ban"
+)
+
+dpe_fields_neuf <- c(
+  dpe_fields_common,
+  "adresse_ban",
+  "numero_voie_ban",
+  "nom_rue_ban",
+  "surface_habitable_immeuble"
+)
+
+numeric_cols_common <- c(
+  "annee_construction",
+  "surface_habitable_logement",
+  "surface_habitable_immeuble",
+  "coordonnee_cartographique_x_ban",
+  "coordonnee_cartographique_y_ban",
+  "cout_total_5_usages",
+  "cout_chauffage",
+  "cout_ecs",
+  "cout_refroidissement",
+  "cout_eclairage",
+  "score_ban",
+  "conso_5_usages_par_m2_ep",
+  "conso_5_usages_par_m2_ef",
+  "conso_5_usages_ef",
+  "conso_ecs_ep",
+  "emission_ges_5_usages",
+  "emission_ges_5_usages_par_m2",
+  "besoin_chauffage",
+  "besoin_refroidissement",
+  "besoin_ecs"
+)
+
+date_cols_common <- c(
+  "date_reception_dpe",
+  "date_etablissement_dpe",
+  "date_visite_diagnostiqueur",
+  "date_fin_validite_dpe"
+)
+
+# ---- FONCTIONS D'APPEL API (EXISTANT + NEUF) ----
+
+fetch_dpe_existant <- function(codes) {
+  df_final <- data.frame()
+  base_url <- "https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines"
+  
+  for (code_postal in codes) {
+    params <- list(
+      page  = 1,
+      size  = 250,
+      select = paste(dpe_fields_existant, collapse = ","),
+      qs     = paste0('code_postal_ban:"', code_postal, '"')
+    )
+    
+    r <- GET(base_url, query = params)
+    if (status_code(r) != 200) next
+    
+    content <- fromJSON(rawToChar(r$content))
+    df <- content$results
+    if (!is.null(df) && nrow(df) > 0) {
+      df_final <- plyr::rbind.fill(df_final, df)
+    }
+  }
+  
+  if (nrow(df_final) == 0) return(NULL)
+  
+  for (col in intersect(date_cols_common, names(df_final))) {
+    df_final[[col]] <- as.Date(df_final[[col]])
+  }
+  for (col in intersect(numeric_cols_common, names(df_final))) {
+    df_final[[col]] <- suppressWarnings(as.numeric(df_final[[col]]))
+  }
+  
+  df_final$type_logement <- "Existant"
+  df_final
+}
+
+fetch_dpe_neuf <- function(codes) {
+  df_final <- data.frame()
+  base_url <- "https://data.ademe.fr/data-fair/api/v1/datasets/dpe02neuf/lines"
+  
+  for (code_postal in codes) {
+    params <- list(
+      page  = 1,
+      size  = 250,
+      select = paste(dpe_fields_neuf, collapse = ","),
+      qs     = paste0('code_postal_ban:"', code_postal, '"')
+    )
+    
+    r <- GET(base_url, query = params)
+    if (status_code(r) != 200) next
+    
+    content <- fromJSON(rawToChar(r$content))
+    df <- content$results
+    if (!is.null(df) && nrow(df) > 0) {
+      df_final <- plyr::rbind.fill(df_final, df)
+    }
+  }
+  
+  if (nrow(df_final) == 0) return(NULL)
+  
+  for (col in intersect(date_cols_common, names(df_final))) {
+    df_final[[col]] <- as.Date(df_final[[col]])
+  }
+  for (col in intersect(numeric_cols_common, names(df_final))) {
+    df_final[[col]] <- suppressWarnings(as.numeric(df_final[[col]]))
+  }
+  
+  df_final$type_logement <- "Neuf"
+  df_final
+}
+```
+
+# 1. Objet du rapport
+
+Ce rapport présente une analyse descriptive des Diagnostics de Performance Énergétique (DPE) du département du Rhône (69) à partir de l’API ADEME, en cohérence avec l’application **projet_r_shiny**.
+
+Les paramètres utilisés sont définis en en-tête :
+
+- `params$code_postal` :  
+  - `"69"` pour l’ensemble des DPE du département,  
+  - ou un code postal ciblé.
+
+- `params$type_logement` :  
+  - `"Existant"`, `"Neuf"` ou `"les deux"`.
+
+---
+
+# 2. Importation et préparation des données
+
+```{r import}
+# Lecture des adresses pour déterminer les codes postaux du 69
+adresses_69 <- read.csv(
+  "adresses-69.csv",
+  header = TRUE, sep = ";", dec = ".", encoding = "latin1"
+)
+
+if (params$code_postal == "69") {
+  code_postaux <- sort(unique(adresses_69$code_postal))
+} else {
+  code_postaux <- params$code_postal
+}
+
+# Récupération des DPE existants et neufs
+dpe_ex <- fetch_dpe_existant(code_postaux)
+dpe_ne <- fetch_dpe_neuf(code_postaux)
+
+if (is.null(dpe_ex)) dpe_ex <- data.frame()
+if (is.null(dpe_ne)) dpe_ne <- data.frame()
+
+dpe_all <- plyr::rbind.fill(dpe_ex, dpe_ne)
+
+# Filtre sur le type de logement
+if (params$type_logement != "les deux") {
+  dpe_all <- dpe_all %>% dplyr::filter(type_logement == params$type_logement)
+}
+
+nb_dpe <- nrow(dpe_all)
+
+# Normalisation des étiquettes DPE
+if ("etiquette_dpe" %in% names(dpe_all)) {
+  dpe_all$etiquette_clean <- toupper(trimws(dpe_all$etiquette_dpe))
+  dpe_all$etiquette_clean[!(dpe_all$etiquette_clean %in% valid_letters)] <- NA
+} else {
+  dpe_all$etiquette_clean <- NA
+}
+
+# Gestion des outliers sur la surface (p1–p99)
+if ("surface_habitable_logement" %in% names(dpe_all)) {
+  res_trim <- trim_var_for_plot(dpe_all, "surface_habitable_logement")
+  dpe_all  <- res_trim$df
+}
+
+nb_dpe <- nrow(dpe_all)
+
+glimpse(dpe_all)
+```
+
+---
+
+# 3. Indicateurs principaux (KPI)
+
+```{r kpi}
+if (nb_dpe == 0) {
+  cat("Aucun DPE disponible pour ces paramètres (code postal / type de logement).")
+} else {
+  surf_moy  <- mean(dpe_all$surface_habitable_logement, na.rm = TRUE)
+  surf_med  <- median(dpe_all$surface_habitable_logement, na.rm = TRUE)
+  
+  if ("annee_construction" %in% names(dpe_all)) {
+    annee_med <- median(dpe_all$annee_construction, na.rm = TRUE)
+  } else {
+    annee_med <- NA
+  }
+  
+  part_ABC <- mean(dpe_all$etiquette_clean %in% c("A","B","C"), na.rm = TRUE) * 100
+  
+  date_cols_presentes <- intersect(
+    c("date_etablissement_dpe","date_reception_dpe"),
+    names(dpe_all)
+  )
+  if (length(date_cols_presentes) > 0) {
+    dates_cand <- do.call(
+      c,
+      lapply(date_cols_presentes, function(col) dpe_all[[col]])
+    )
+    last_date <- suppressWarnings(max(dates_cand, na.rm = TRUE))
+    if (!is.finite(last_date)) last_date <- NA
+  } else {
+    last_date <- NA
+  }
+  
+  cat("
+## KPI
+
+- Nombre total de DPE : ", nb_dpe, "
+- Surface moyenne : ", round(surf_moy,1), " m²
+- Surface médiane : ", round(surf_med,1), " m²
+- Année médiane de construction (si disponible) : ", annee_med, "
+- Part des logements en classes A–B–C : ", round(part_ABC,1), " %
+- Dernière date disponible (réception ou établissement) : ",
+      ifelse(is.na(last_date), "Non disponible", format(last_date, "%d/%m/%Y")), "
+")
+}
+```
+
+---
+
+# 4. Contexte et répartition des DPE
+
+## 4.1 Répartition des étiquettes DPE
+
+```{r bar-etiquette}
+if (nb_dpe > 0 && "etiquette_dpe" %in% names(dpe_all)) {
+  ggplot(dpe_all, aes(x = etiquette_dpe)) +
+    geom_bar(fill = "steelblue") +
+    theme_app_dark() +
+    labs(
+      title = "Répartition des étiquettes DPE",
+      x = "Étiquette DPE",
+      y = "Nombre de DPE"
+    )
+} else {
+  cat("Répartition des étiquettes non disponible.")
+}
+```
+
+## 4.2 Histogramme des surfaces (p1–p99)
+
+```{r hist-surface}
+if (nb_dpe > 0 && "surface_habitable_logement" %in% names(dpe_all)) {
+  res <- trim_var_for_plot(dpe_all, "surface_habitable_logement")
+  
+  ggplot(res$df, aes(surface_habitable_logement)) +
+    geom_histogram(bins = 30, fill = "darkorange") +
+    theme_app_dark() +
+    coord_cartesian(xlim = res$limits) +
+    labs(
+      title = "Histogramme des surfaces habitables (p1–p99)",
+      x = "Surface habitable (m²)",
+      y = "Nombre de logements"
+    )
+} else {
+  cat("Histogramme des surfaces non disponible.")
+}
+```
+
+---
+
+# 5. Analyse univariée
+
+## 5.1 Distribution d’une variable énergétique
+
+```{r univ-hist}
+if (nb_dpe > 0 && "conso_5_usages_par_m2_ep" %in% names(dpe_all)) {
+  res <- trim_var_for_plot(dpe_all, "conso_5_usages_par_m2_ep")
+  
+  ggplot(res$df, aes(conso_5_usages_par_m2_ep)) +
+    geom_histogram(bins = 30, fill = "skyblue") +
+    theme_app_dark() +
+    coord_cartesian(xlim = res$limits) +
+    labs(
+      title = "Distribution de la consommation 5 usages EP/m² (p1–p99)",
+      x = "Conso 5 usages EP/m²",
+      y = "Nombre de logements"
+    )
+} else {
+  cat("Variable conso_5_usages_par_m2_ep non disponible.")
+}
+```
+
+## 5.2 Boîte à moustaches par type de logement
+
+```{r univ-box}
+if (nb_dpe > 0 &&
+    "type_logement" %in% names(dpe_all) &&
+    "surface_habitable_logement" %in% names(dpe_all)) {
+  
+  res <- trim_var_for_plot(dpe_all, "surface_habitable_logement")
+  
+  ggplot(res$df,
+         aes(type_logement,
+             surface_habitable_logement,
+             fill = type_logement)) +
+    geom_boxplot(alpha = 0.7) +
+    theme_app_dark() +
+    theme(legend.position = "none") +
+    labs(
+      title = "Surface habitable selon le type de logement (p1–p99)",
+      x = "Type de logement",
+      y = "Surface habitable (m²)"
+    )
+} else {
+  cat("Boîte à moustaches non disponible (variables manquantes).")
+}
+```
+
+---
+
+# 6. Analyse bivariée : surface et coût
+
+Cette partie met en relation la surface habitable et le coût total des cinq usages, avec un nuage de points, une droite de régression linéaire et des indicateurs bivariés.
+
+## 6.1 Nuage de points surface / coût total
+
+```{r bivar-scatter}
+if (nb_dpe > 0 &&
+    "surface_habitable_logement" %in% names(dpe_all) &&
+    "cout_total_5_usages" %in% names(dpe_all)) {
+  
+  df_biv <- dpe_all %>%
+    dplyr::filter(
+      !is.na(surface_habitable_logement),
+      !is.na(cout_total_5_usages)
+    )
+  
+  res_surf <- trim_var_for_plot(df_biv, "surface_habitable_logement")
+  df_biv   <- res_surf$df
+  res_cout <- trim_var_for_plot(df_biv, "cout_total_5_usages")
+  df_biv   <- res_cout$df
+  
+  if (nrow(df_biv) > 10) {
+    ggplot(df_biv,
+           aes(surface_habitable_logement,
+               cout_total_5_usages)) +
+      geom_point(alpha = 0.5, color = "lightgreen") +
+      geom_smooth(method = "lm", se = FALSE, color = "orange") +
+      theme_app_dark() +
+      labs(
+        title = "Coût total 5 usages en fonction de la surface habitable",
+        x = "Surface habitable (m²)",
+        y = "Coût total 5 usages"
+      )
+  } else {
+    cat("Nuage de points non tracé (données insuffisantes).")
+  }
+  
+} else {
+  cat("Variables nécessaires non disponibles pour l'analyse bivariée.")
+}
+```
+
+## 6.2 Corrélation et régression linéaire surface / coût
+
+```{r bivar-stats}
+if (nb_dpe > 0 &&
+    "surface_habitable_logement" %in% names(dpe_all) &&
+    "cout_total_5_usages" %in% names(dpe_all)) {
+  
+  df_biv <- dpe_all %>%
+    dplyr::filter(
+      !is.na(surface_habitable_logement),
+      !is.na(cout_total_5_usages)
+    )
+  
+  if (nrow(df_biv) > 10) {
+    vx <- as.numeric(df_biv$surface_habitable_logement)
+    vy <- as.numeric(df_biv$cout_total_5_usages)
+    
+    if (sd(vx, na.rm = TRUE) > 0 && sd(vy, na.rm = TRUE) > 0) {
+      corr <- cor(vx, vy, use = "complete.obs")
+      cat("Coefficient de corrélation (Pearson) surface / coût :", round(corr, 3), "\n\n")
+      print(summary(lm(vy ~ vx)))
+    } else {
+      cat("Dispersion insuffisante pour calculer une corrélation pertinente.")
+    }
+  } else {
+    cat("Données insuffisantes pour estimer une régression linéaire fiable.")
+  }
+  
+} else {
+  cat("Variables nécessaires non disponibles pour les statistiques bivariées.")
+}
+```
+
+---
+
+# 7. Énergie et coûts
+
+## 7.1 Coût total 5 usages par étiquette DPE
+
+```{r box-cout-etiquette}
+if (nb_dpe > 0 &&
+    "cout_total_5_usages" %in% names(dpe_all) &&
+    "etiquette_dpe" %in% names(dpe_all)) {
+  
+  df_cout <- dpe_all %>%
+    dplyr::filter(
+      !is.na(cout_total_5_usages),
+      !is.na(etiquette_dpe)
+    )
+  
+  if (nrow(df_cout) > 0) {
+    res <- trim_var_for_plot(df_cout, "cout_total_5_usages")
+    
+    ggplot(res$df,
+           aes(etiquette_dpe,
+               cout_total_5_usages,
+               fill = etiquette_dpe)) +
+      geom_boxplot(alpha = 0.7) +
+      theme_app_dark() +
+      theme(legend.position = "none") +
+      labs(
+        title = "Coût total 5 usages par étiquette DPE (p1–p99)",
+        x = "Étiquette DPE",
+        y = "Coût total 5 usages"
+      )
+  } else {
+    cat("Données de coût insuffisantes pour tracer la boîte à moustaches.")
+  }
+  
+} else {
+  cat("Variables cout_total_5_usages / etiquette_dpe non disponibles.")
+}
+```
+
+## 7.2 Répartition des énergies de chauffage
+
+```{r bar-energie-chauffage}
+if (nb_dpe > 0 &&
+    "type_energie_principale_chauffage" %in% names(dpe_all)) {
+  
+  df_ch <- dpe_all %>%
+    dplyr::filter(!is.na(type_energie_principale_chauffage))
+  
+  if (nrow(df_ch) > 0) {
+    ggplot(df_ch,
+           aes(x = type_energie_principale_chauffage)) +
+      geom_bar(fill = "steelblue") +
+      theme_app_dark() +
+      coord_flip() +
+      labs(
+        title = "Répartition des énergies de chauffage",
+        x = "Type d'énergie de chauffage",
+        y = "Nombre de DPE"
+      )
+  } else {
+    cat("Aucune information exploitable sur le type d'énergie de chauffage.")
+  }
+  
+} else {
+  cat("Variable type_energie_principale_chauffage non disponible.")
+}
+```
+
+## 7.3 Histogramme de la consommation 5 usages EP/m²
+
+```{r hist-conso-ep}
+if (nb_dpe > 0 &&
+    "conso_5_usages_par_m2_ep" %in% names(dpe_all)) {
+  
+  res <- trim_var_for_plot(dpe_all, "conso_5_usages_par_m2_ep")
+  
+  ggplot(res$df,
+         aes(conso_5_usages_par_m2_ep)) +
+    geom_histogram(bins = 30, fill = "tomato") +
+    theme_app_dark() +
+    coord_cartesian(xlim = res$limits) +
+    labs(
+      title = "Histogramme conso 5 usages EP/m² (p1–p99)",
+      x = "Conso 5 usages EP/m²",
+      y = "Nombre de logements"
+    )
+} else {
+  cat("Histogramme conso EP/m² non disponible.")
+}
+```
+
+## 7.4 Répartition des énergies ECS
+
+```{r bar-energie-ecs}
+if (nb_dpe > 0 &&
+    "type_energie_principale_ecs" %in% names(dpe_all)) {
+  
+  df_ecs <- dpe_all %>%
+    dplyr::filter(!is.na(type_energie_principale_ecs))
+  
+  if (nrow(df_ecs) > 0) {
+    ggplot(df_ecs,
+           aes(x = type_energie_principale_ecs)) +
+      geom_bar(fill = "darkseagreen") +
+      theme_app_dark() +
+      coord_flip() +
+      labs(
+        title = "Répartition des énergies ECS",
+        x = "Type d'énergie ECS",
+        y = "Nombre de DPE"
+      )
+  } else {
+    cat("Aucune information exploitable sur le type d'énergie ECS.")
+  }
+  
+} else {
+  cat("Variable type_energie_principale_ecs non disponible.")
+}
+```
+
+---
+
+# 8. Conclusion
+
+Ce rapport RMarkdown est aligné sur l’application **projet_r_shiny** :
+
+- exploitation de l’API ADEME sur tout le département 69 ou sur un code postal ciblé ;
+- calcul d’indicateurs synthétiques (KPI) sur les volumes, surfaces, années de construction, classes DPE et dates de mise à disposition ;
+- représentation graphique cohérente avec l’interface Shiny :  
+  histogrammes, boîtes à moustaches, nuage de points avec droite de régression surface / coût total, distributions des énergies de chauffage et d’ECS, coûts par étiquette DPE ;
+- filtrage des valeurs extrêmes par un encadrement p1–p99, afin de stabiliser les visualisations et les indicateurs.

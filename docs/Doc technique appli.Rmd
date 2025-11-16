@@ -1,0 +1,332 @@
+---
+title: "Documentation technique – Application Shiny DPE 69"
+author: "Christophe DEPIN, Arthur MALLIERE, Oleksandr Lisovyi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE
+)
+
+```
+
++---------------------+              +----------------------------+
+|  Utilisateur        |   HTTP(S)    |   Serveur Shiny (app.R)    |
+|  (navigateur web)   | <----------> |   UI + server + login      |
++---------------------+              +-----------+----------------+
+                                                |
+                                                v
+                                   +----------------------------+
+                                   |      Logique applicative   |
+                                   |  - Filtres / KPI           |
+                                   |  - Graphiques ggplot2      |
+                                   |  - Cartographie leaflet    |
+                                   +-----------+----------------+
+                                               / \
+                                              /   \
+                                             v     v
+                      +---------------------------------+   +------------------------+
+                      |        API ADEME DPE            |   |   Fichier local        |
+                      |   dpe03existant / dpe02neuf     |   |   adresses-69.csv      |
+                      +---------------------------------+   +------------------------+
+                      
+2.2 Rôle des composants
+
+UI Shiny
+
+fluidPage, navbarPage, tabPanel, sidebarLayout ;
+
+thèmes via shinythemes::shinytheme("cyborg") ;
+
+sélecteurs, sliders, boutons, carte leaflet, tableaux DT.
+
+Server Shiny
+
+logiques réactives : filtrage des DPE, préparation des données graphiques, calcul des KPI ;
+
+appels à l’API ADEME ;
+
+génération de graphiques ggplot2 ;
+
+construction de la carte interactive leaflet ;
+
+export des données (CSV) et des graphiques (PNG).
+
+Sécurité
+
+shinymanager::secure_app et secure_server pour la page de login ;
+
+identifiants gérés dans un data.frame credentials.
+
+Sources de données
+
+API ADEME dpe03existant (logements existants) ;
+
+API ADEME dpe02neuf (logements neufs) ;
+
+fichier adresses-69.csv (coordonnées x/y/lon/lat, codes postaux).
+
+3. Packages nécessaires
+
+Les principaux packages utilisés dans app.R sont :
+
+Interface / Shiny
+
+shiny
+
+shinythemes
+
+shinymanager
+
+leaflet
+
+DT
+
+Manipulation de données
+
+dplyr
+
+plyr
+
+lubridate
+
+Visualisation
+
+ggplot2
+
+API / JSON
+
+httr
+
+jsonlite
+
+Rendu / rapport
+
+rmarkdown
+
+knitr (pour le rapport RMarkdown associé)
+
+4. Logique de récupération et de préparation des données
+4.1 Récupération des codes postaux
+
+Le fichier adresses-69.csv contient les adresses et coordonnées des points du département 69.
+
+Il est lu en début de script pour construire le vecteur code_postaux :
+
+code_postaux <- sort(unique(adresses_69$code_postal))
+
+ces codes postaux servent à interroger l’API ADEME.
+
+Les colonnes x, y, lon, lat sont converties en numériques pour la cartographie.
+
+4.2 Fonctions d’appel à l’API ADEME
+
+Deux fonctions principales :
+
+fetch_dpe_existant(codes)
+
+fetch_dpe_neuf(codes)
+
+Principe commun :
+
+pour chaque code postal :
+
+construction de la requête avec httr::GET vers l’API ADEME ;
+
+params contient :
+
+page = 1 ;
+
+size = 250 (limitation par requête) ;
+
+select : liste explicite des champs utiles ;
+
+qs : filtre sur code_postal_ban.
+
+récupération du JSON (jsonlite::fromJSON) ;
+
+fusion des résultats via plyr::rbind.fill.
+
+post-traitement :
+
+conversion des colonnes de dates (date_*) en Date ;
+
+conversion des colonnes numériques (coûts, consommations, surfaces, coordonnées) ;
+
+ajout de la variable type_logement = "Existant" ou "Neuf".
+
+La fonction fetch_all_dpe(codes) :
+
+appelle fetch_dpe_existant et fetch_dpe_neuf ;
+
+fusionne les deux tables en un seul data.frame ;
+
+crée une colonne date_dpe (date d’établissement ou de réception) ;
+
+renvoie :
+
+data : table complète triée par noms de colonnes ;
+
+last_date : date DPE la plus récente.
+
+4.3 Nettoyage et gestion des outliers
+
+Fonction trim_var_for_plot(df, var, probs = c(0.01, 0.99)) :
+
+sélectionne la variable numérique var ;
+
+calcule les quantiles p1 et p99 ;
+
+conserve uniquement les observations comprises entre ces deux bornes ;
+
+renvoie :
+
+df : data.frame filtré ;
+
+limits : bornes de l’axe X pour les graphiques.
+
+Cette fonction est utilisée dans :
+
+l’histogramme des surfaces ;
+
+les analyses univariées et bivariées ;
+
+les graphiques de coûts et de consommations.
+
+4.4 Réactivité et filtrage dans Shiny
+
+Dans le server, la logique de filtrage est centralisée dans data_filtered() :
+
+démarrage à partir de dpe_data() (valeur réactive contenant l’ensemble des DPE) ;
+
+filtres successifs :
+
+code_postal (Tous vs un CP précis) ;
+
+type_logement (Tous / Existant / Neuf) ;
+
+intervalle d’annee_construction.
+
+Les autres sorties (KPI, graphiques, cartes, exports) s’appuient sur data_filtered() pour rester cohérentes avec les choix de l’utilisateur.
+
+5. Interface utilisateur et fonctionnalités
+5.1 Thème et navigation
+
+Thème général : shinytheme("cyborg") (fond sombre).
+
+themeSelector() permet à l’utilisateur de choisir un thème Shiny alternatif.
+
+Navigation par onglets via navbarPage :
+
+Contexte
+
+Analyse univariée
+
+Analyse bivariée
+
+Énergie & coûts
+
+Cartographie
+
+Export & Mise à jour
+
+À propos
+
+5.2 KPI
+
+À partir de data_filtered() :
+
+nombre de DPE ;
+
+surface moyenne (m²) ;
+
+part des étiquettes A–B–C ;
+
+dernière date de DPE disponible (last_update()).
+
+Ces KPI sont affichés dans des boîtes en haut de la page.
+
+5.3 Graphiques principaux
+
+Les graphiques utilisent tous ggplot2 avec le thème theme_app_dark() :
+
+Contexte
+
+histogramme des surfaces ;
+
+distribution des étiquettes DPE.
+
+Analyse univariée
+
+histogramme d’une variable numérique au choix ;
+
+boîte à moustaches par type de logement.
+
+Analyse bivariée
+
+nuage de points (X, Y) ;
+
+droite de régression linéaire (geom_smooth(method = "lm")) ;
+
+calcul du coefficient de corrélation + résumé de la régression (lm).
+
+Énergie & coûts
+
+boîte à moustaches du coût total 5 usages par étiquette DPE ;
+
+histogramme de la conso 5 usages EP/m² ;
+
+diagrammes en barres des types d’énergie de chauffage et ECS.
+
+Chaque graphique dispose d’un bouton d’export .png via downloadHandler.
+
+5.4 Cartographie
+
+Les données cartographiques proviennent de la jointure entre :
+
+les DPE filtrés contenant coordonnee_cartographique_x_ban et coordonnee_cartographique_y_ban ;
+
+le fichier adresses-69.csv (cols x, y, lon, lat).
+
+leaflet :
+
+fond de carte providers$CartoDB.DarkMatter ;
+
+addCircleMarkers pour représenter soit les DPE individuels, soit les centroïdes par code postal ;
+
+popups informatives (code postal, nombre de DPE ou détail d’un DPE).
+
+6. Authentification et mise à jour des données
+6.1 Authentification
+
+credentials : data.frame contenant les couples user / password ;
+
+ui <- secure_app(app_ui) : encapsulation de l’UI ;
+
+dans server :
+
+res_auth <- secure_server(check_credentials = check_credentials(credentials)).
+
+Cette couche bloque l’accès à l’application sans identifiant.
+
+6.2 Rafraîchissement des données
+
+Bouton refresh_data dans les filtres.
+
+observeEvent(input$refresh_data, { ... }) :
+
+déclenche un nouvel appel à fetch_all_dpe(code_postaux) ;
+
+met à jour dpe_data() et last_update() ;
+
+affiche une notification showNotification(...).
+
+La date de dernière mise à jour est affichée dans :
+
+la zone KPI ;
+
+l’onglet « Export & Mise à jour ».
